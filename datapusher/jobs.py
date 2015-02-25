@@ -343,16 +343,21 @@ def push_to_datastore(task_id, input, dry_run=False):
     types = messytables.type_guess(row_set.sample, types=TYPES, strict=True)
     row_set.register_processor(messytables.types_processor(types))
 
+    # if ( len(types) != len(headers)):
+    #     raise util.JobError('Header row has less elements than other rows')
+
     headers = [header.strip() for header in headers if header.strip()]
     headers_set = set(headers)
 
     def row_iterator():
+        count = 0
         for row in row_set:
+            count = count + 1
             data_row = {}
             for index, cell in enumerate(row):
                 column_name = cell.column.strip()
                 if column_name not in headers_set:
-                    continue
+                    raise util.JobError('Line {} has too many columns'.format(count))
                 data_row[column_name] = cell.value
             yield data_row
     result = row_iterator()
