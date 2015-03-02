@@ -25,7 +25,7 @@ import ckanserviceprovider.util as util
 if not locale.getlocale()[0]:
     locale.setlocale(locale.LC_ALL, '')
 
-MAX_CONTENT_LENGTH = 10485760  # 10MB
+MAX_CONTENT_LENGTH = 52428800  # 50MB
 DOWNLOAD_TIMEOUT = 30
 
 TYPE_MAPPING = {
@@ -336,12 +336,22 @@ def push_to_datastore(task_id, input, dry_run=False):
         except:
             raise util.JobError(e)
 
-    row_set = table_set.tables.pop()
-    offset, headers = messytables.headers_guess(row_set.sample)
-    row_set.register_processor(messytables.headers_processor(headers))
-    row_set.register_processor(messytables.offset_processor(offset + 1))
-    types = messytables.type_guess(row_set.sample, types=TYPES, strict=True)
-    row_set.register_processor(messytables.types_processor(types))
+    try:
+        row_set = table_set.tables.pop()
+        offset, headers = messytables.headers_guess(row_set.sample)
+        row_set.register_processor(messytables.headers_processor(headers))
+        row_set.register_processor(messytables.offset_processor(offset + 1))
+        types = messytables.type_guess(row_set.sample, types=TYPES, strict=True)
+        row_set.register_processor(messytables.types_processor(types))
+    except messytables.ReadError, e:
+        if 'field larger than field limit' in str(e):
+            msg = '''
+                At least one of the fields is too large and cannot be imported into the datastore directly.
+                Field limit is 256000.
+            '''
+            raise util.JobError(msg)
+        else:
+            raise e
 
     # if ( len(types) != len(headers)):
     #     raise util.JobError('Header row has less elements than other rows')
@@ -350,7 +360,7 @@ def push_to_datastore(task_id, input, dry_run=False):
     headers_set = set(headers)
 
     def row_iterator():
-        count = 0
+        count = 1 # header line
         for row in row_set:
             count = count + 1
             data_row = {}
